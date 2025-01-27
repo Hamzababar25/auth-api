@@ -7,14 +7,19 @@ import {
   handleGetAllPosts,
 } from '../controllers/postController';
 import { authenticate } from '../middlewares/authMiddleware';
+import { authorize } from '../middlewares/roleMiddleware';
 
 const router = express.Router();
 
-router.post('/', authenticate, handleCreatePost);
-router.get('/',authenticate, handleGetPosts);
-router.get('/all', handleGetAllPosts);
+router.post('/', authenticate, authorize(['user', 'admin']), handleCreatePost);
+router.get('/', authenticate, authorize(['user', 'admin']), handleGetPosts);
 
-router.get('/:id', authenticate, handleGetPostById);
-router.delete('/:id', authenticate, handleDeletePost);
+// Admin-Only Permissions
+router.get('/all', authenticate, authorize(['admin']), handleGetAllPosts);
+router.delete('/:id', authenticate, authorize(['admin']), handleDeletePost);
+
+// User-Specific Permissions
+router.get('/:id', authenticate, authorize(['user', 'admin']), handleGetPostById);
+
 
 export default router;

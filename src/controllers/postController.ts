@@ -3,7 +3,7 @@ import { createPostSchema, postIdSchema } from '../validations/postValidation';
 import { createPost, getPosts, getPostById, deletePost, getAllPosts, } from '../services/postService';
 import { PrismaClient } from '@prisma/client';
 interface AuthenticatedRequest extends Request {
-  user: { id: number };
+  user: { id: number,role:string };
 }
 const prisma = new PrismaClient();
 
@@ -25,22 +25,26 @@ export const handleCreatePost = async (req: Request, res: Response): Promise<voi
 };
 
 
-export const handleGetPosts = async (req: Request, res: Response): Promise<void>  => {
+export const handleGetPosts = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as AuthenticatedRequest).user.id;
-    if (!userId)
-      {  res.status(401).json({ error: "Unauthorized" });
-    return
-  }
-    const posts = await getPosts(userId);
+    const role = (req as AuthenticatedRequest).user.role;
+
+    if (role === 'admin') {
+      const posts = await prisma.post.findMany();
+      res.json(posts);
+      return;
+    }
+
+    const posts = await prisma.post.findMany({
+      where: { userId },
+    });
+
     res.json(posts);
   } catch (err) {
-    if (err instanceof Error) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
-}
 };
-
 export const handleGetAllPosts = async (req: Request, res: Response): Promise<void>  => {
   try {
   
@@ -77,20 +81,32 @@ export const handleGetPostById = async (req: Request, res: Response) : Promise<v
 }
 };
 
-export const handleDeletePost = async (req: Request, res: Response): Promise<void>  => {
+export const handleDeletePost = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as AuthenticatedRequest).user.id;
-        if (!userId){res.status(401).json({ error: "Unauthorized" });
-  return}
+    const role = (req as AuthenticatedRequest).user.role;
     const { id } = postIdSchema.parse(req.params);
-    const deleted = await deletePost(userId, Number(id));
 
-    if (!deleted.count){ res.status(404).json({ error: "Post not found" });
-  return}
+    const post = await prisma.post.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!post) {
+      res.status(404).json({ error: 'Post not found' });
+      return;
+    }
+
+    if (role !== 'admin' && post.userId !== userId) {
+      res.status(403).json({ error: 'Forbidden: You cannot delete this post' });
+      return;
+    }
+
+    await prisma.post.delete({
+      where: { id: Number(id) },
+    });
+
     res.status(204).send();
   } catch (err) {
-    if (err instanceof Error) {
-    res.status(400).json({ error: err.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
-}
 };
